@@ -6,12 +6,21 @@ import re
 def get_video_info(url):
     try:
         yt = YouTube(url)
+        captions = yt.captions
+        st.write(f"Debug: 가져온 자막 정보: {captions}")  # 디버그 정보 추가
+        
+        # 자막이 비어있을 경우 다시 한 번 시도
+        if not captions:
+            yt = YouTube(url)
+            captions = yt.captions
+            st.write(f"Debug: 두 번째 시도 자막 정보: {captions}")  # 디버그 정보 추가
+        
         return {
             'title': yt.title,
             'thumbnail': yt.thumbnail_url,
             'channel': yt.author,
             'duration': f"{yt.length // 60}:{yt.length % 60:02d}",
-            'captions': yt.captions
+            'captions': captions
         }
     except Exception as e:
         st.error(f"동영상 정보를 가져오는 중 오류 발생: {str(e)}")
@@ -62,6 +71,7 @@ if enter_button or st.session_state.url_input:
             st.subheader("자막 다운로드 옵션")
             
             available_captions = list(video_info['captions'].keys())
+            st.write(f"Debug: 사용 가능한 자막: {available_captions}")  # 디버그 정보 추가
             
             if available_captions:
                 selected_lang = st.selectbox(
