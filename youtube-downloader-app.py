@@ -1,13 +1,6 @@
 import streamlit as st
-import requests
-
-# pytubefix 임포트를 try-except 블록으로 감싸서 오류 처리
-try:
-    from pytubefix import YouTube
-    from pytubefix.exceptions import PytubeError
-except ImportError:
-    st.error("pytubefix 라이브러리가 설치되지 않았습니다. 'pip install pytubefix'를 실행하여 설치해주세요.")
-    st.stop()
+import io
+from pytubefix import YouTube
 
 def get_video_info(url):
     try:
@@ -19,10 +12,8 @@ def get_video_info(url):
             'duration': f"{yt.length // 60}:{yt.length % 60:02d}",
             'streams': yt.streams.filter(only_audio=True)
         }
-    except PytubeError as e:
-        return {'error': str(e)}
     except Exception as e:
-        return {'error': f"예상치 못한 오류가 발생했습니다: {str(e)}"}
+        return {'error': f"동영상 정보를 가져오는 중 오류가 발생했습니다: {str(e)}"}
 
 def format_filesize(bytes):
     for unit in ['B', 'KB', 'MB', 'GB']:
@@ -65,9 +56,16 @@ if enter_button or st.session_state.url_input:
             with col3:
                 if st.button("다운로드", key=stream.itag):
                     try:
-                        download_path = stream.download()
-                        st.success(f"다운로드 완료: {download_path}")
+                        buffer = io.BytesIO()
+                        stream.stream_to_buffer(buffer)
+                        buffer.seek(0)
+                        st.download_button(
+                            label="파일 다운로드",
+                            data=buffer,
+                            file_name=f"{video_info['title']}.{stream.mime_type.split('/')[1]}",
+                            mime=stream.mime_type
+                        )
                     except Exception as e:
                         st.error(f"다운로드 중 오류 발생: {str(e)}")
     else:
-        st.error(f"동영상 정보를 가져오는 중 오류가 발생했습니다: {video_info['error']}")
+        st.error(video_info['error'])
