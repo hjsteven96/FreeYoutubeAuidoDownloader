@@ -18,7 +18,7 @@ def get_video_info(url):
             'stream': yt.streams.get_audio_only()
         }
     except Exception as e:
-        return {'error': f"동영상 정보를 가져오는 중 오류가 발생했습니다: {str(e)}"}
+        return {'error': str(e)}
 
 st.set_page_config(page_title="YouTube Downloader", page_icon="🎵")
 st.title("YouTube 음원 다운로더")
