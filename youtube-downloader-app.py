@@ -2,19 +2,20 @@ import streamlit as st
 from pytubefix import YouTube
 import os
 import re
+import requests
+import xml.etree.ElementTree as ET
 
 def get_video_info(url):
     try:
         yt = YouTube(url)
         captions = yt.captions
-        st.write(f"Debug: 가져온 자막 정보: {captions}")  # 디버그 정보 추가
-        
-        # 자막이 비어있을 경우 다시 한 번 시도
+        st.write(f"Debug: pytubefix로 가져온 자막 정보: {captions}")
+
+        # pytubefix로 자막을 가져오지 못한 경우 대체 방법 시도
         if not captions:
-            yt = YouTube(url)
-            captions = yt.captions
-            st.write(f"Debug: 두 번째 시도 자막 정보: {captions}")  # 디버그 정보 추가
-        
+            captions = get_captions_alternative(yt.video_id)
+            st.write(f"Debug: 대체 방법으로 가져온 자막 정보: {captions}")
+
         return {
             'title': yt.title,
             'thumbnail': yt.thumbnail_url,
@@ -26,23 +27,68 @@ def get_video_info(url):
         st.error(f"동영상 정보를 가져오는 중 오류 발생: {str(e)}")
         return {'error': str(e)}
 
-def download_subtitle(url, lang_code):
+def get_captions_alternative(video_id):
     try:
-        yt = YouTube(url)
-        caption = yt.captions[lang_code]
-        srt_caption = caption.generate_srt_captions()
+        # YouTube의 자막 트랙 정보를 가져오는 URL
+        captions_url = f"https://www.youtube.com/api/timedtext?v={video_id}&type=list"
+        response = requests.get(captions_url)
+        root = ET.fromstring(response.content)
+
+        captions = {}
+        for track in root.findall('track'):
+            lang_code = track.get('lang_code')
+            lang_name = track.get('lang_translated')
+            captions[lang_code] = {'name': lang_name}
+
+        return captions
+    except Exception as e:
+        st.error(f"대체 방법으로 자막 정보를 가져오는 중 오류 발생: {str(e)}")
+        return {}
+
+def download_subtitle(video_id, lang_code):
+    try:
+        # YouTube의 자막 내용을 가져오는 URL
+        subtitle_url = f"https://www.youtube.com/api/timedtext?v={video_id}&lang={lang_code}"
+        response = requests.get(subtitle_url)
         
-        # 파일명에서 부적절한 문자 제거
-        filename = re.sub(r'[^\w\-_\. ]', '_', yt.title)
-        filepath = f"{filename}_{lang_code}.srt"
-        
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(srt_caption)
-        
-        return filepath
+        if response.status_code == 200:
+            root = ET.fromstring(response.content)
+            srt_captions = convert_to_srt(root)
+            
+            filename = f"subtitle_{video_id}_{lang_code}.srt"
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(srt_captions)
+            
+            return filename
+        else:
+            st.error("자막을 다운로드할 수 없습니다.")
+            return None
     except Exception as e:
         st.error(f"자막 다운로드 중 오류 발생: {str(e)}")
         return None
+
+def convert_to_srt(root):
+    srt_lines = []
+    index = 1
+    for i, text in enumerate(root.findall('text')):
+        start = float(text.get('start'))
+        duration = float(text.get('dur')) if text.get('dur') else 0
+        end = start + duration
+        
+        srt_lines.append(f"{index}")
+        srt_lines.append(f"{format_time(start)} --> {format_time(end)}")
+        srt_lines.append(text.text if text.text else "")
+        srt_lines.append("")
+        
+        index += 1
+    
+    return "\n".join(srt_lines)
+
+def format_time(seconds):
+    hours = int(seconds / 3600)
+    minutes = int((seconds % 3600) / 60)
+    seconds = seconds % 60
+    return f"{hours:02d}:{minutes:02d}:{seconds:06.3f}".replace(".", ",")
 
 st.set_page_config(page_title="YouTube 자막 다운로더", page_icon="📝")
 st.title("YouTube 자막 다운로더")
@@ -71,17 +117,18 @@ if enter_button or st.session_state.url_input:
             st.subheader("자막 다운로드 옵션")
             
             available_captions = list(video_info['captions'].keys())
-            st.write(f"Debug: 사용 가능한 자막: {available_captions}")  # 디버그 정보 추가
+            st.write(f"Debug: 사용 가능한 자막: {available_captions}")
             
             if available_captions:
                 selected_lang = st.selectbox(
                     "언어를 선택하세요:",
                     options=available_captions,
-                    format_func=lambda x: f"{x} ({video_info['captions'][x].name})"
+                    format_func=lambda x: f"{x} ({video_info['captions'][x]['name']})"
                 )
                 
                 if st.button("자막 다운로드"):
-                    subtitle_file = download_subtitle(url, selected_lang)
+                    video_id = YouTube(url).video_id
+                    subtitle_file = download_subtitle(video_id, selected_lang)
                     if subtitle_file:
                         st.success(f"자막 다운로드 완료: {subtitle_file}")
                         
