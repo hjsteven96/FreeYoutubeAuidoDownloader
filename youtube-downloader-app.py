@@ -3,7 +3,6 @@ import requests
 
 try:
     from pytubefix import YouTube
-    from pytubefix.exceptions import PytubeError
 except ImportError:
     st.error("pytubefix 라이브러리가 설치되지 않았습니다. 'pip install pytubefix'를 실행하여 설치해주세요.")
     st.stop()
@@ -19,12 +18,9 @@ def get_video_info(url):
             'duration': f"{yt.length // 60}:{yt.length % 60:02d}",
             'streams': yt.streams.filter(only_audio=True)
         }
-    except PytubeError as e:
-        st.error(f"PytubeError: {str(e)}")
-        return {'error': str(e)}
     except Exception as e:
-        st.error(f"예상치 못한 오류: {str(e)}")
-        return {'error': f"예상치 못한 오류가 발생했습니다: {str(e)}"}
+        st.error(f"동영상 정보를 가져오는 중 오류 발생: {str(e)}")
+        return {'error': str(e)}
 
 def format_filesize(bytes):
     for unit in ['B', 'KB', 'MB', 'GB']:
