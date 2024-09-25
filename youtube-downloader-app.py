@@ -1,17 +1,15 @@
 import streamlit as st
 import io
 import re
-from pytubefix import YouTube
+from pytube import YouTube
 
 def is_valid_youtube_url(url):
-    # YouTube URL 패턴
     pattern = r'^(https?://)?(www\.)?(youtube|youtu|youtube-nocookie)\.(com|be)/.+'
     return re.match(pattern, url) is not None
 
 def get_video_info(url):
     try:
         yt = YouTube(url)
-        yt.check_availability()  # 동영상 사용 가능 여부 확인
         return {
             'title': yt.title,
             'thumbnail': yt.thumbnail_url,
@@ -32,17 +30,34 @@ def format_filesize(bytes):
 st.set_page_config(page_title="YouTube Downloader", page_icon="🎵")
 st.title("YouTube 음원 다운로더")
 
-col1, col2 = st.columns([4, 1])
+# CSS를 사용하여 입력 창과 버튼 스타일 지정
+st.markdown("""
+<style>
+div.row-widget.stButton > button {
+    background-color: black;
+    color: white;
+    border: none;
+    height: 3em;
+}
+div.row-widget.stTextInput > div > div > input {
+    background-color: white;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# 입력 창과 버튼을 같은 행에 배치
+col1, col2 = st.columns([5,1])
 with col1:
     url = st.text_input("YouTube 링크를 입력하세요:", key="url_input")
 with col2:
-    enter_button = st.button("Enter", key="enter_button")
+    enter_button = st.button("Enter")
 
 if enter_button or st.session_state.url_input:
     if not is_valid_youtube_url(st.session_state.url_input):
         st.error("URL 형식을 확인해 주세요")
     else:
-        video_info = get_video_info(st.session_state.url_input)
+        with st.spinner('동영상 정보를 가져오는 중...'):
+            video_info = get_video_info(st.session_state.url_input)
         
         if 'error' not in video_info:
             col1, col2 = st.columns([1, 2])
