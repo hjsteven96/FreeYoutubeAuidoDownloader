@@ -75,8 +75,9 @@ st.set_page_config(page_title="YouTube 정보 뷰어", page_icon="🎥")
 st.title("YouTube 정보 뷰어")
 
 url = st.text_input("YouTube 링크를 입력하세요:")
+submit_button = st.button("정보 가져오기")
 
-if url:
+if submit_button and url:
     video_id = get_video_id(url)
     if video_id:
         with st.spinner('동영상 정보를 가져오는 중...'):
@@ -106,27 +107,23 @@ if url:
                 
                 if st.button("선택한 자막 다운로드"):
                     caption_id = caption_options[selected_caption]
-                    caption_content = download_caption(caption_id)
+                    with st.spinner('자막을 다운로드하는 중...'):
+                        caption_content = download_caption(caption_id)
                     if caption_content:
                         srt_content = parse_ttml_to_srt(caption_content)
                         b64 = base64.b64encode(srt_content.encode()).decode()
                         href = f'<a href="data:text/plain;base64,{b64}" download="{video_info["title"]}.srt">자막 파일 다운로드 (.srt)</a>'
                         st.markdown(href, unsafe_allow_html=True)
+                        st.success("자막 다운로드 준비가 완료되었습니다. 위 링크를 클릭하여 다운로드하세요.")
             else:
                 st.write("이 동영상에는 사용 가능한 자막이 없습니다.")
             
-            st.subheader("오디오 정보")
-            st.write("YouTube는 동영상의 오디오 트랙에 대한 직접적인 정보를 제공하지 않습니다.")
-            st.write("그러나 다음과 같은 방법으로 오디오를 합법적으로 즐길 수 있습니다:")
-            youtube_music_url = f"https://music.youtube.com/watch?v={video_id}"
-            st.markdown(f"[YouTube Music에서 열기]({youtube_music_url})")
-            
             st.subheader("동영상 미리보기")
             st.video(url)
+        else:
+            st.error("동영상 정보를 가져올 수 없습니다.")
     else:
         st.error("유효한 YouTube URL을 입력해주세요.")
-else:
-    st.info("YouTube 동영상 링크를 입력하면 정보를 표시합니다.")
 
 st.write("참고: 이 애플리케이션은 YouTube Data API를 사용합니다.")
 st.write("주의: 저작권을 존중하며 합법적인 방법으로만 콘텐츠를 이용해 주세요.")
