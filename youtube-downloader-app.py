@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import traceback
 
 try:
     from pytubefix import YouTube
@@ -8,7 +9,7 @@ except ImportError:
     st.stop()
 
 def get_video_info(url):
-    st.write(f"처리 중인 URL: {url}")  # URL 확인을 위해 추가
+    st.write(f"처리 중인 URL: {url}")
     try:
         yt = YouTube(url)
         return {
@@ -20,6 +21,7 @@ def get_video_info(url):
         }
     except Exception as e:
         st.error(f"동영상 정보를 가져오는 중 오류 발생: {str(e)}")
+        st.error(f"상세 오류 정보:\n{traceback.format_exc()}")
         return {'error': str(e)}
 
 def format_filesize(bytes):
@@ -37,9 +39,9 @@ enter_button = st.button("Enter")
 
 if enter_button or st.session_state.url_input:
     url = st.session_state.url_input
-    st.write(f"입력된 URL: {url}")  # 입력된 URL 확인
+    st.write(f"입력된 URL: {url}")
     
-    if url:  # URL이 비어있지 않은 경우에만 처리
+    if url:
         video_info = get_video_info(url)
         
         if 'error' not in video_info:
@@ -67,7 +69,11 @@ if enter_button or st.session_state.url_input:
                             st.success(f"다운로드 완료: {download_path}")
                         except Exception as e:
                             st.error(f"다운로드 중 오류 발생: {str(e)}")
+                            st.error(f"상세 오류 정보:\n{traceback.format_exc()}")
         else:
             st.error(f"동영상 정보를 가져오는 중 오류가 발생했습니다: {video_info['error']}")
     else:
         st.warning("URL을 입력해주세요.")
+
+st.write("pytubefix 버전 정보:")
+st.code(f"!pip show pytubefix")
