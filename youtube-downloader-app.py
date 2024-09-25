@@ -1,22 +1,31 @@
 import streamlit as st
 import io
 import re
-from pytube import YouTube
+import yt_dlp
 
 def is_valid_youtube_url(url):
     pattern = r'^(https?://)?(www\.)?(youtube|youtu|youtube-nocookie)\.(com|be)/.+'
     return re.match(pattern, url) is not None
 
 def get_video_info(url):
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+    }
     try:
-        yt = YouTube(url)
-        return {
-            'title': yt.title,
-            'thumbnail': yt.thumbnail_url,
-            'channel': yt.author,
-            'duration': f"{yt.length // 60}:{yt.length % 60:02d}",
-            'streams': yt.streams.filter(only_audio=True)
-        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            return {
+                'title': info['title'],
+                'thumbnail': info['thumbnail'],
+                'channel': info['uploader'],
+                'duration': f"{info['duration'] // 60}:{info['duration'] % 60:02d}",
+                'formats': [f for f in info['formats'] if f.get('acodec') != 'none' and f.get('vcodec') == 'none']
+            }
     except Exception as e:
         return {'error': f"동영상 정보를 가져오는 중 오류가 발생했습니다: {str(e)}"}
 
@@ -71,24 +80,31 @@ if enter_button or st.session_state.url_input:
                 st.write(f"재생 시간: {video_info['duration']}")
             
             st.subheader("음원 다운로드 옵션")
-            for stream in video_info['streams']:
+            for format in video_info['formats']:
                 col1, col2, col3 = st.columns([2, 1, 1])
                 with col1:
-                    st.write(f"{stream.abr} ({stream.mime_type.split('/')[1]})")
+                    st.write(f"{format.get('acodec', 'Unknown')} ({format.get('ext', 'Unknown')})")
                 with col2:
-                    st.write(format_filesize(stream.filesize))
+                    st.write(format_filesize(format.get('filesize', 0)))
                 with col3:
-                    if st.button("다운로드", key=stream.itag):
+                    if st.button("다운로드", key=format['format_id']):
                         try:
-                            buffer = io.BytesIO()
-                            stream.stream_to_buffer(buffer)
-                            buffer.seek(0)
-                            st.download_button(
-                                label="파일 다운로드",
-                                data=buffer,
-                                file_name=f"{video_info['title']}.{stream.mime_type.split('/')[1]}",
-                                mime=stream.mime_type
-                            )
+                            ydl_opts = {
+                                'format': format['format_id'],
+                                'outtmpl': '%(title)s.%(ext)s',
+                            }
+                            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                                info = ydl.extract_info(st.session_state.url_input, download=False)
+                                filename = ydl.prepare_filename(info)
+                                ydl.download([st.session_state.url_input])
+                            
+                            with open(filename, "rb") as file:
+                                btn = st.download_button(
+                                    label="파일 다운로드",
+                                    data=file,
+                                    file_name=filename,
+                                    mime=f"audio/{format.get('ext', 'mp3')}"
+                                )
                         except Exception as e:
                             st.error(f"다운로드 중 오류 발생: {str(e)}")
         else:
