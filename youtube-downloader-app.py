@@ -74,56 +74,68 @@ def parse_ttml_to_srt(ttml_content):
 st.set_page_config(page_title="YouTube 정보 뷰어", page_icon="🎥")
 st.title("YouTube 정보 뷰어")
 
-url = st.text_input("YouTube 링크를 입력하세요:")
-submit_button = st.button("정보 가져오기")
+# 세션 상태 초기화
+if 'url' not in st.session_state:
+    st.session_state.url = ""
+if 'video_info' not in st.session_state:
+    st.session_state.video_info = None
 
-if submit_button and url:
+# URL 입력 필드
+url = st.text_input("YouTube 링크를 입력하세요:", value=st.session_state.url)
+
+# URL이 변경되면 비디오 정보 초기화
+if url != st.session_state.url:
+    st.session_state.url = url
+    st.session_state.video_info = None
+
+# 정보 가져오기 버튼
+if st.button("정보 가져오기") or (url and not st.session_state.video_info):
     video_id = get_video_id(url)
     if video_id:
         with st.spinner('동영상 정보를 가져오는 중...'):
-            video_info = get_video_info(video_id)
-        
-        if video_info:
-            st.subheader(video_info["title"])
-            st.write(f"채널: {video_info['channel_title']}")
-            
-            publish_date = datetime.fromisoformat(video_info['publish_date'].replace('Z', '+00:00'))
-            st.write(f"게시일: {publish_date.strftime('%Y년 %m월 %d일')}")
-            
-            duration = parse_duration(video_info['duration'])
-            hours, remainder = divmod(duration.total_seconds(), 3600)
-            minutes, seconds = divmod(remainder, 60)
-            duration_str = f"{int(hours)}시간 " if hours > 0 else ""
-            duration_str += f"{int(minutes)}분 {int(seconds)}초"
-            st.write(f"재생 시간: {duration_str}")
-            
-            st.subheader("동영상 설명")
-            st.write(video_info["description"])
-            
-            st.subheader("사용 가능한 자막")
-            if video_info["captions"]:
-                caption_options = {f"{caption['snippet']['language']} ({caption['snippet']['trackKind']})": caption['id'] for caption in video_info["captions"]}
-                selected_caption = st.selectbox("다운로드할 자막을 선택하세요:", list(caption_options.keys()))
-                
-                if st.button("선택한 자막 다운로드"):
-                    caption_id = caption_options[selected_caption]
-                    with st.spinner('자막을 다운로드하는 중...'):
-                        caption_content = download_caption(caption_id)
-                    if caption_content:
-                        srt_content = parse_ttml_to_srt(caption_content)
-                        b64 = base64.b64encode(srt_content.encode()).decode()
-                        href = f'<a href="data:text/plain;base64,{b64}" download="{video_info["title"]}.srt">자막 파일 다운로드 (.srt)</a>'
-                        st.markdown(href, unsafe_allow_html=True)
-                        st.success("자막 다운로드 준비가 완료되었습니다. 위 링크를 클릭하여 다운로드하세요.")
-            else:
-                st.write("이 동영상에는 사용 가능한 자막이 없습니다.")
-            
-            st.subheader("동영상 미리보기")
-            st.video(url)
-        else:
-            st.error("동영상 정보를 가져올 수 없습니다.")
+            st.session_state.video_info = get_video_info(video_id)
     else:
         st.error("유효한 YouTube URL을 입력해주세요.")
+
+# 비디오 정보 표시
+if st.session_state.video_info:
+    video_info = st.session_state.video_info
+    st.subheader(video_info["title"])
+    st.write(f"채널: {video_info['channel_title']}")
+    
+    publish_date = datetime.fromisoformat(video_info['publish_date'].replace('Z', '+00:00'))
+    st.write(f"게시일: {publish_date.strftime('%Y년 %m월 %d일')}")
+    
+    duration = parse_duration(video_info['duration'])
+    hours, remainder = divmod(duration.total_seconds(), 3600)
+    minutes, seconds = divmod(remainder, 60)
+    duration_str = f"{int(hours)}시간 " if hours > 0 else ""
+    duration_str += f"{int(minutes)}분 {int(seconds)}초"
+    st.write(f"재생 시간: {duration_str}")
+    
+    st.subheader("동영상 설명")
+    st.write(video_info["description"])
+    
+    st.subheader("사용 가능한 자막")
+    if video_info["captions"]:
+        caption_options = {f"{caption['snippet']['language']} ({caption['snippet']['trackKind']})": caption['id'] for caption in video_info["captions"]}
+        selected_caption = st.selectbox("다운로드할 자막을 선택하세요:", list(caption_options.keys()))
+        
+        if st.button("선택한 자막 다운로드"):
+            caption_id = caption_options[selected_caption]
+            with st.spinner('자막을 다운로드하는 중...'):
+                caption_content = download_caption(caption_id)
+            if caption_content:
+                srt_content = parse_ttml_to_srt(caption_content)
+                b64 = base64.b64encode(srt_content.encode()).decode()
+                href = f'<a href="data:text/plain;base64,{b64}" download="{video_info["title"]}.srt">자막 파일 다운로드 (.srt)</a>'
+                st.markdown(href, unsafe_allow_html=True)
+                st.success("자막 다운로드 준비가 완료되었습니다. 위 링크를 클릭하여 다운로드하세요.")
+    else:
+        st.write("이 동영상에는 사용 가능한 자막이 없습니다.")
+    
+    st.subheader("동영상 미리보기")
+    st.video(url)
 
 st.write("참고: 이 애플리케이션은 YouTube Data API를 사용합니다.")
 st.write("주의: 저작권을 존중하며 합법적인 방법으로만 콘텐츠를 이용해 주세요.")
