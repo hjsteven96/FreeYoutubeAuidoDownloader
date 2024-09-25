@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 import base64
 
 # YouTube API 키 설정
-API_KEY = "YOUR_API_KEY_HERE"  # 여기에 실제 API 키를 입력하세요
+API_KEY = "AIzaSyCc_2gWC1gaHw2BUV8YX8jYPcbOzUqvRpE"  # 여기에 실제 API 키를 입력하세요
 
 def get_video_id(url):
     video_id_match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", url)
