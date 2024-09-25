@@ -1,8 +1,13 @@
 import streamlit as st
 import requests
-from pytubefix import YouTube
-from pytubefix.exceptions import PytubeError
-import re
+
+# pytubefix 임포트를 try-except 블록으로 감싸서 오류 처리
+try:
+    from pytubefix import YouTube
+    from pytubefix.exceptions import PytubeError
+except ImportError:
+    st.error("pytubefix 라이브러리가 설치되지 않았습니다. 'pip install pytubefix'를 실행하여 설치해주세요.")
+    st.stop()
 
 def get_video_info(url):
     try:
@@ -16,6 +21,8 @@ def get_video_info(url):
         }
     except PytubeError as e:
         return {'error': str(e)}
+    except Exception as e:
+        return {'error': f"예상치 못한 오류가 발생했습니다: {str(e)}"}
 
 def format_filesize(bytes):
     for unit in ['B', 'KB', 'MB', 'GB']:
