@@ -1,12 +1,11 @@
 import streamlit as st
-import googleapiclient.discovery
+import requests
 import re
+from datetime import datetime
+from isodate import parse_duration
 
 # YouTube API 키 설정
 API_KEY = "AIzaSyCc_2gWC1gaHw2BUV8YX8jYPcbOzUqvRpE"  # 여기에 실제 API 키를 입력하세요
-
-# YouTube API 클라이언트 생성
-youtube = googleapiclient.discovery.build("youtube", "v3", developerKey=API_KEY)
 
 def get_video_id(url):
     # YouTube URL에서 비디오 ID 추출
@@ -18,23 +17,21 @@ def get_video_id(url):
 def get_video_info(video_id):
     try:
         # 비디오 정보 요청
-        video_response = youtube.videos().list(
-            part="snippet,contentDetails",
-            id=video_id
-        ).execute()
+        video_url = f"https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id={video_id}&key={API_KEY}"
+        video_response = requests.get(video_url)
+        video_data = video_response.json()
 
-        if not video_response["items"]:
+        if not video_data.get("items"):
             return None
 
-        video_data = video_response["items"][0]
-        snippet = video_data["snippet"]
-        content_details = video_data["contentDetails"]
+        item = video_data["items"][0]
+        snippet = item["snippet"]
+        content_details = item["contentDetails"]
 
         # 자막 정보 요청
-        captions_response = youtube.captions().list(
-            part="snippet",
-            videoId=video_id
-        ).execute()
+        captions_url = f"https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId={video_id}&key={API_KEY}"
+        captions_response = requests.get(captions_url)
+        captions_data = captions_response.json()
 
         return {
             "title": snippet["title"],
@@ -42,7 +39,7 @@ def get_video_info(video_id):
             "channel_title": snippet["channelTitle"],
             "publish_date": snippet["publishedAt"],
             "duration": content_details["duration"],
-            "captions": captions_response.get("items", [])
+            "captions": captions_data.get("items", [])
         }
     except Exception as e:
         st.error(f"동영상 정보를 가져오는 중 오류 발생: {str(e)}")
@@ -62,8 +59,18 @@ if url:
         if video_info:
             st.subheader(video_info["title"])
             st.write(f"채널: {video_info['channel_title']}")
-            st.write(f"게시일: {video_info['publish_date']}")
-            st.write(f"재생 시간: {video_info['duration']}")
+            
+            # ISO 8601 형식의 날짜를 읽기 쉬운 형식으로 변환
+            publish_date = datetime.fromisoformat(video_info['publish_date'].replace('Z', '+00:00'))
+            st.write(f"게시일: {publish_date.strftime('%Y년 %m월 %d일')}")
+            
+            # ISO 8601 형식의 기간을 읽기 쉬운 형식으로 변환
+            duration = parse_duration(video_info['duration'])
+            hours, remainder = divmod(duration.total_seconds(), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            duration_str = f"{int(hours)}시간 " if hours > 0 else ""
+            duration_str += f"{int(minutes)}분 {int(seconds)}초"
+            st.write(f"재생 시간: {duration_str}")
             
             st.subheader("동영상 설명")
             st.write(video_info["description"])
