@@ -1,44 +1,39 @@
 import streamlit as st
-import yt_dlp
-import json
+from pytubefix import YouTube
+import os
+import re
 
 def get_video_info(url):
-    ydl_opts = {
-        'quiet': True,
-        'no_warnings': True,
-        'writesubtitles': True,
-        'allsubtitles': True,
-        'skip_download': True,
-    }
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            return {
-                'title': info['title'],
-                'thumbnail': info['thumbnail'],
-                'channel': info['channel'],
-                'duration': f"{info['duration'] // 60}:{info['duration'] % 60:02d}",
-                'subtitles': info.get('subtitles', {}),
-                'automatic_captions': info.get('automatic_captions', {})
-            }
+        yt = YouTube(url)
+        return {
+            'title': yt.title,
+            'thumbnail': yt.thumbnail_url,
+            'channel': yt.author,
+            'duration': f"{yt.length // 60}:{yt.length % 60:02d}",
+            'captions': yt.captions
+        }
     except Exception as e:
         st.error(f"동영상 정보를 가져오는 중 오류 발생: {str(e)}")
         return {'error': str(e)}
 
-def download_subtitle(url, lang, subtitle_type='subtitles'):
-    ydl_opts = {
-        'skip_download': True,
-        'writesubtitles': True,
-        'subtitleslangs': [lang],
-        'subtitlesformat': 'srt',
-        'outtmpl': '%(title)s.%(ext)s'
-    }
-    if subtitle_type == 'automatic_captions':
-        ydl_opts['writeautomaticsub'] = True
-    
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        return f"{info['title']}.{lang}.srt"
+def download_subtitle(url, lang_code):
+    try:
+        yt = YouTube(url)
+        caption = yt.captions[lang_code]
+        srt_caption = caption.generate_srt_captions()
+        
+        # 파일명에서 부적절한 문자 제거
+        filename = re.sub(r'[^\w\-_\. ]', '_', yt.title)
+        filepath = f"{filename}_{lang_code}.srt"
+        
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(srt_caption)
+        
+        return filepath
+    except Exception as e:
+        st.error(f"자막 다운로드 중 오류 발생: {str(e)}")
+        return None
 
 st.set_page_config(page_title="YouTube 자막 다운로더", page_icon="📝")
 st.title("YouTube 자막 다운로더")
@@ -66,21 +61,18 @@ if enter_button or st.session_state.url_input:
             
             st.subheader("자막 다운로드 옵션")
             
-            subtitle_options = []
-            for subtitle_type in ['subtitles', 'automatic_captions']:
-                for lang, subtitles in video_info[subtitle_type].items():
-                    subtitle_options.append((lang, subtitle_type))
+            available_captions = list(video_info['captions'].keys())
             
-            if subtitle_options:
-                selected_lang, selected_type = st.selectbox(
-                    "언어 및 자막 유형을 선택하세요:",
-                    options=subtitle_options,
-                    format_func=lambda x: f"{x[0]} ({'자막' if x[1] == 'subtitles' else '자동 생성'})"
+            if available_captions:
+                selected_lang = st.selectbox(
+                    "언어를 선택하세요:",
+                    options=available_captions,
+                    format_func=lambda x: f"{x} ({video_info['captions'][x].name})"
                 )
                 
                 if st.button("자막 다운로드"):
-                    try:
-                        subtitle_file = download_subtitle(url, selected_lang, selected_type)
+                    subtitle_file = download_subtitle(url, selected_lang)
+                    if subtitle_file:
                         st.success(f"자막 다운로드 완료: {subtitle_file}")
                         
                         with open(subtitle_file, 'r', encoding='utf-8') as file:
@@ -92,8 +84,9 @@ if enter_button or st.session_state.url_input:
                             file_name=subtitle_file,
                             mime="text/plain"
                         )
-                    except Exception as e:
-                        st.error(f"자막 다운로드 중 오류 발생: {str(e)}")
+                        
+                        # 파일 삭제
+                        os.remove(subtitle_file)
             else:
                 st.warning("이 동영상에는 사용 가능한 자막이 없습니다.")
         else:
@@ -101,5 +94,5 @@ if enter_button or st.session_state.url_input:
     else:
         st.warning("URL을 입력해주세요.")
 
-st.write("yt-dlp 버전 정보:")
-st.code(f"!pip show yt-dlp")
+st.write("pytubefix 버전 정보:")
+st.code(f"!pip show pytubefix")
