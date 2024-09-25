@@ -3,7 +3,11 @@ import yt_dlp
 import os
 
 def get_video_info(url):
-    ydl_opts = {}
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'extractor_args': {'youtube': {'player_client': ['android']}},
+    }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -14,8 +18,15 @@ def get_video_info(url):
                 'duration': f"{info['duration'] // 60}:{info['duration'] % 60:02d}",
                 'formats': [f for f in info['formats'] if f.get('acodec') != 'none' and f.get('vcodec') == 'none']
             }
+    except yt_dlp.utils.DownloadError as e:
+        if "Sign in to confirm you're not a bot" in str(e):
+            st.error("YouTube가 봇 확인을 요구하고 있습니다. 브라우저에서 직접 YouTube에 로그인한 후 다시 시도해주세요.")
+            st.info("또는 잠시 후에 다시 시도해보세요. 이 문제는 일시적일 수 있습니다.")
+        else:
+            st.error(f"동영상 정보를 가져오는 중 오류 발생: {str(e)}")
+        return {'error': str(e)}
     except Exception as e:
-        st.error(f"동영상 정보를 가져오는 중 오류 발생: {str(e)}")
+        st.error(f"예상치 못한 오류 발생: {str(e)}")
         return {'error': str(e)}
 
 def format_filesize(bytes):
@@ -34,6 +45,7 @@ def download_audio(url, format_id):
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
+        'extractor_args': {'youtube': {'player_client': ['android']}},
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
@@ -78,7 +90,7 @@ if enter_button or st.session_state.url_input:
                         except Exception as e:
                             st.error(f"다운로드 중 오류 발생: {str(e)}")
         else:
-            st.error(f"동영상 정보를 가져오는 중 오류가 발생했습니다: {video_info['error']}")
+            st.error(f"동영상 정보를 가져오는 데 실패했습니다. 다른 URL을 시도해보세요.")
     else:
         st.warning("URL을 입력해주세요.")
 
