@@ -3,8 +3,8 @@ import requests
 import re
 from datetime import datetime
 from isodate import parse_duration
-import xml.etree.ElementTree as ET
-import base64
+from youtube_transcript_api import YouTubeTranscriptApi
+import json
 
 # YouTube API 키 설정
 API_KEY = "AIzaSyCc_2gWC1gaHw2BUV8YX8jYPcbOzUqvRpE"  # 여기에 실제 API 키를 입력하세요
@@ -26,50 +26,32 @@ def get_video_info(video_id):
         snippet = item["snippet"]
         content_details = item["contentDetails"]
 
-        captions_url = f"https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId={video_id}&key={API_KEY}"
-        captions_response = requests.get(captions_url)
-        captions_data = captions_response.json()
-
         return {
             "title": snippet["title"],
             "description": snippet["description"],
             "channel_title": snippet["channelTitle"],
             "publish_date": snippet["publishedAt"],
             "duration": content_details["duration"],
-            "captions": captions_data.get("items", [])
         }
     except Exception as e:
         st.error(f"동영상 정보를 가져오는 중 오류 발생: {str(e)}")
         return None
 
-def download_caption(caption_id):
+def get_available_transcripts(video_id):
     try:
-        caption_url = f"https://www.googleapis.com/youtube/v3/captions/{caption_id}?key={API_KEY}"
-        headers = {"Accept": "application/ttml+xml"}
-        response = requests.get(caption_url, headers=headers)
-        
-        if response.status_code == 200:
-            return response.text
-        else:
-            st.error(f"자막 다운로드 중 오류 발생: {response.status_code}")
-            return None
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        return [{'language': t.language, 'language_code': t.language_code} for t in transcript_list]
+    except Exception as e:
+        st.error(f"자막 정보를 가져오는 중 오류 발생: {str(e)}")
+        return []
+
+def download_transcript(video_id, language_code):
+    try:
+        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=[language_code])
+        return transcript
     except Exception as e:
         st.error(f"자막 다운로드 중 오류 발생: {str(e)}")
         return None
-
-def parse_ttml_to_srt(ttml_content):
-    root = ET.fromstring(ttml_content)
-    namespace = {'tt': 'http://www.w3.org/ns/ttml'}
-    
-    srt_content = ""
-    for i, p in enumerate(root.findall('.//tt:p', namespace), 1):
-        begin = p.get('begin')
-        end = p.get('end')
-        text = p.text or ""
-        
-        srt_content += f"{i}\n{begin.replace('.', ',')} --> {end.replace('.', ',')}\n{text}\n\n"
-    
-    return srt_content
 
 st.set_page_config(page_title="YouTube 정보 뷰어", page_icon="🎥")
 st.title("YouTube 정보 뷰어")
@@ -79,6 +61,8 @@ if 'url' not in st.session_state:
     st.session_state.url = ""
 if 'video_info' not in st.session_state:
     st.session_state.video_info = None
+if 'transcripts' not in st.session_state:
+    st.session_state.transcripts = None
 
 # URL 입력 필드
 url = st.text_input("YouTube 링크를 입력하세요:", value=st.session_state.url)
@@ -87,6 +71,7 @@ url = st.text_input("YouTube 링크를 입력하세요:", value=st.session_state
 if url != st.session_state.url:
     st.session_state.url = url
     st.session_state.video_info = None
+    st.session_state.transcripts = None
 
 # 정보 가져오기 버튼
 if st.button("정보 가져오기") or (url and not st.session_state.video_info):
@@ -94,6 +79,7 @@ if st.button("정보 가져오기") or (url and not st.session_state.video_info)
     if video_id:
         with st.spinner('동영상 정보를 가져오는 중...'):
             st.session_state.video_info = get_video_info(video_id)
+            st.session_state.transcripts = get_available_transcripts(video_id)
     else:
         st.error("유효한 YouTube URL을 입력해주세요.")
 
@@ -117,25 +103,27 @@ if st.session_state.video_info:
     st.write(video_info["description"])
     
     st.subheader("사용 가능한 자막")
-    if video_info["captions"]:
-        caption_options = {f"{caption['snippet']['language']} ({caption['snippet']['trackKind']})": caption['id'] for caption in video_info["captions"]}
-        selected_caption = st.selectbox("다운로드할 자막을 선택하세요:", list(caption_options.keys()))
+    if st.session_state.transcripts:
+        transcript_options = {f"{t['language']} ({t['language_code']})": t['language_code'] for t in st.session_state.transcripts}
+        selected_transcript = st.selectbox("다운로드할 자막을 선택하세요:", list(transcript_options.keys()))
         
         if st.button("선택한 자막 다운로드"):
-            caption_id = caption_options[selected_caption]
+            language_code = transcript_options[selected_transcript]
             with st.spinner('자막을 다운로드하는 중...'):
-                caption_content = download_caption(caption_id)
-            if caption_content:
-                srt_content = parse_ttml_to_srt(caption_content)
-                b64 = base64.b64encode(srt_content.encode()).decode()
-                href = f'<a href="data:text/plain;base64,{b64}" download="{video_info["title"]}.srt">자막 파일 다운로드 (.srt)</a>'
-                st.markdown(href, unsafe_allow_html=True)
-                st.success("자막 다운로드 준비가 완료되었습니다. 위 링크를 클릭하여 다운로드하세요.")
+                transcript = download_transcript(get_video_id(url), language_code)
+            if transcript:
+                st.download_button(
+                    label="자막 파일 다운로드 (JSON)",
+                    data=json.dumps(transcript, ensure_ascii=False, indent=2),
+                    file_name=f"{video_info['title']}_transcript.json",
+                    mime="application/json"
+                )
+                st.success("자막 다운로드가 완료되었습니다. 위 버튼을 클릭하여 다운로드하세요.")
     else:
         st.write("이 동영상에는 사용 가능한 자막이 없습니다.")
     
     st.subheader("동영상 미리보기")
     st.video(url)
 
-st.write("참고: 이 애플리케이션은 YouTube Data API를 사용합니다.")
+st.write("참고: 이 애플리케이션은 YouTube Data API와 youtube-transcript-api를 사용합니다.")
 st.write("주의: 저작권을 존중하며 합법적인 방법으로만 콘텐츠를 이용해 주세요.")
