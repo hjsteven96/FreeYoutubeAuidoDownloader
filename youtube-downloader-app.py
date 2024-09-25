@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit.components.v1 import html
 
 def count_characters(text):
     with_spaces = len(text)
@@ -7,22 +8,27 @@ def count_characters(text):
 
 st.title("실시간 글자 수 계산기")
 
-# 결과를 표시할 빈 요소 생성
-result = st.empty()
+# JavaScript 코드
+js_code = """
+<script>
+function updateCount() {
+    const text = document.getElementById('text-input').value;
+    const withSpaces = text.length;
+    const withoutSpaces = text.replace(/\s/g, '').length;
+    document.getElementById('result').innerText = `공백 포함 글자 수: ${withSpaces}\n공백 제거 글자 수: ${withoutSpaces}`;
+}
+</script>
+"""
 
-def update_count():
-    # 현재 입력된 텍스트에 대해 글자 수 계산
-    char_count_with_spaces, char_count_without_spaces = count_characters(user_input)
-    
-    # 결과 업데이트
-    result.write(f"공백 포함 글자 수: {char_count_with_spaces}\n"
-                 f"공백 제거 글자 수: {char_count_without_spaces}")
+# HTML 코드
+html_code = f"""
+{js_code}
+<textarea id="text-input" oninput="updateCount()" rows="5" style="width: 100%; padding: 10px;"></textarea>
+<div id="result" style="margin-top: 10px;">텍스트를 입력하면 실시간으로 글자 수가 여기에 표시됩니다.</div>
+"""
 
-# 텍스트 입력 영역 생성 (콜백 함수 지정)
-user_input = st.text_area("텍스트를 입력하세요:", on_change=update_count)
+# HTML 컴포넌트 렌더링
+html(html_code, height=200)
 
-# 초기 상태 표시
-if not user_input:
-    result.write("텍스트를 입력하면 실시간으로 글자 수가 여기에 표시됩니다.")
-else:
-    update_count()
+st.markdown("---")
+st.write("위의 텍스트 영역에 글자를 입력하면 실시간으로 글자 수가 업데이트됩니다.")
