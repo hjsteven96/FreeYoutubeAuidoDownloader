@@ -4,6 +4,7 @@ import traceback
 
 try:
     from pytubefix import YouTube
+    from pytubefix.exceptions import VideoUnavailable
 except ImportError:
     st.error("pytubefix 라이브러리가 설치되지 않았습니다. 'pip install pytubefix'를 실행하여 설치해주세요.")
     st.stop()
@@ -12,6 +13,7 @@ def get_video_info(url):
     st.write(f"처리 중인 URL: {url}")
     try:
         yt = YouTube(url)
+        yt.check_availability()  # 명시적으로 가용성 체크
         return {
             'title': yt.title,
             'thumbnail': yt.thumbnail_url,
@@ -19,6 +21,9 @@ def get_video_info(url):
             'duration': f"{yt.length // 60}:{yt.length % 60:02d}",
             'streams': yt.streams.filter(only_audio=True)
         }
+    except VideoUnavailable:
+        st.error(f"해당 비디오를 사용할 수 없습니다. 비디오가 삭제되었거나, 비공개이거나, 지역 제한이 있을 수 있습니다.")
+        return {'error': '비디오를 사용할 수 없음'}
     except Exception as e:
         st.error(f"동영상 정보를 가져오는 중 오류 발생: {str(e)}")
         st.error(f"상세 오류 정보:\n{traceback.format_exc()}")
