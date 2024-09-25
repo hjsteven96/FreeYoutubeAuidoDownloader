@@ -4,34 +4,38 @@ import os
 import re
 import requests
 import xml.etree.ElementTree as ET
+import asyncio
+import concurrent.futures
 
-def get_video_info(url):
+async def get_video_info(url):
     try:
-        yt = YouTube(url)
-        captions = yt.captions
-        st.write(f"Debug: pytubefix로 가져온 자막 정보: {captions}")
+        with st.spinner('동영상 정보를 가져오는 중...'):
+            loop = asyncio.get_event_loop()
+            yt = await loop.run_in_executor(None, YouTube, url)
+            captions = await loop.run_in_executor(None, lambda: yt.captions)
+            st.write(f"Debug: pytubefix로 가져온 자막 정보: {captions}")
 
-        # pytubefix로 자막을 가져오지 못한 경우 대체 방법 시도
-        if not captions:
-            captions = get_captions_alternative(yt.video_id)
-            st.write(f"Debug: 대체 방법으로 가져온 자막 정보: {captions}")
+            # pytubefix로 자막을 가져오지 못한 경우 대체 방법 시도
+            if not captions:
+                captions = await get_captions_alternative(yt.video_id)
+                st.write(f"Debug: 대체 방법으로 가져온 자막 정보: {captions}")
 
-        return {
-            'title': yt.title,
-            'thumbnail': yt.thumbnail_url,
-            'channel': yt.author,
-            'duration': f"{yt.length // 60}:{yt.length % 60:02d}",
-            'captions': captions
-        }
+            return {
+                'title': yt.title,
+                'thumbnail': yt.thumbnail_url,
+                'channel': yt.author,
+                'duration': f"{yt.length // 60}:{yt.length % 60:02d}",
+                'captions': captions
+            }
     except Exception as e:
         st.error(f"동영상 정보를 가져오는 중 오류 발생: {str(e)}")
         return {'error': str(e)}
 
-def get_captions_alternative(video_id):
+async def get_captions_alternative(video_id):
     try:
-        # YouTube의 자막 트랙 정보를 가져오는 URL
         captions_url = f"https://www.youtube.com/api/timedtext?v={video_id}&type=list"
-        response = requests.get(captions_url)
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(None, requests.get, captions_url)
         root = ET.fromstring(response.content)
 
         captions = {}
@@ -45,11 +49,11 @@ def get_captions_alternative(video_id):
         st.error(f"대체 방법으로 자막 정보를 가져오는 중 오류 발생: {str(e)}")
         return {}
 
-def download_subtitle(video_id, lang_code):
+async def download_subtitle(video_id, lang_code):
     try:
-        # YouTube의 자막 내용을 가져오는 URL
         subtitle_url = f"https://www.youtube.com/api/timedtext?v={video_id}&lang={lang_code}"
-        response = requests.get(subtitle_url)
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(None, requests.get, subtitle_url)
         
         if response.status_code == 200:
             root = ET.fromstring(response.content)
@@ -101,7 +105,7 @@ if enter_button or st.session_state.url_input:
     st.write(f"입력된 URL: {url}")
     
     if url:
-        video_info = get_video_info(url)
+        video_info = asyncio.run(get_video_info(url))
         
         if 'error' not in video_info:
             col1, col2 = st.columns([1, 2])
@@ -127,8 +131,9 @@ if enter_button or st.session_state.url_input:
                 )
                 
                 if st.button("자막 다운로드"):
-                    video_id = YouTube(url).video_id
-                    subtitle_file = download_subtitle(video_id, selected_lang)
+                    with st.spinner('자막을 다운로드하는 중...'):
+                        video_id = YouTube(url).video_id
+                        subtitle_file = asyncio.run(download_subtitle(video_id, selected_lang))
                     if subtitle_file:
                         st.success(f"자막 다운로드 완료: {subtitle_file}")
                         
